@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ローカル絵本エディタ</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      background: #222;
+      color: #fff;
+      padding: 8px 12px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    header button {
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+    }
+
+    header button:hover {
+      opacity: 0.8;
+    }
+
+    #layoutSelect {
+      padding: 2px 6px;
+      font-size: 13px;
+    }
+
+    #pageIndicator {
+      margin-left: auto;
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 上下2分割レイアウト */
+    .pane {
+      flex: 1;
+      position: relative;
+      display: flex;
+    }
+
+    #topPane {
+      background: #000;
+      color: #fff;
+    }
+
+    #bottomPane {
+      background: #fff;
+      border-top: 3px solid #000;
+    }
+
+    .image-container,
+    .text-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      position: relative;
+    }
+
+    .image-inner {
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      max-width: 90%;
+      max-height: 90%;
+      margin: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    #topImageDropArea,
+    #bottomImageDropArea {
+      border: 2px dashed #666;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+    }
+
+    #bottomImageDropArea {
+      background: rgba(255,255,255,0.6);
+      color: #000;
+    }
+
+    #topPane.dragover,
+    #bottomPane.dragover {
+      outline: 3px dashed #fff;
+    }
+
+    #bottomPane.dragover {
+      outline-color: #000;
+    }
+
+    .image-inner.dragover {
+      border-color: #fff;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .image-inner button {
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+    }
+
+    .image-preview {
+      max-width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+      display: none;
+      cursor: pointer; /* クリックで差し替え */
+    }
+
+    #topTextArea,
+    #bottomTextArea {
+      flex: 1;
+      width: 100%;
+      border: none;
+      resize: none;
+      font-size: 20px;
+      line-height: 1.6;
+      outline: none;
+      background: transparent;
+      padding: 16px;
+    }
+
+    #topTextArea {
+      color: #fff;
+    }
+
+    #bottomTextArea {
+      color: #000;
+    }
+
+    #topTextArea::placeholder,
+    #bottomTextArea::placeholder {
+      color: #bbb;
+    }
+
+    #fileInput,
+    #topImageFileInput,
+    #bottomImageFileInput {
+      display: none;
+    }
+
+    footer {
+      font-size: 11px;
+      text-align: right;
+      padding: 4px 8px;
+      color: #666;
+    }
+
+    @media (max-width: 800px) {
+      #topTextArea,
+      #bottomTextArea { font-size: 16px; }
+    }
+
+    /* ===== ページ一覧オーバーレイ ===== */
+    #pageListOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    #pageListOverlay.active {
+      display: flex;
+    }
+
+    #pageListPanel {
+      background: #fff;
+      max-width: 900px;
+      max-height: 80vh;
+      width: 95%;
+      border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+    }
+
+    #pageListHeader {
+      padding: 8px 12px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 14px;
+    }
+
+    #pageListBody {
+      padding: 8px 12px 12px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 8px;
+    }
+
+    .page-card {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      background: #fafafa;
+      cursor: pointer;
+    }
+
+    .page-card.current {
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0,123,255,0.3);
+    }
+
+    .page-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+
+    .page-card-layout {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+
+    .page-card-thumbs {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 4px;
+    }
+
+    .page-card-thumbs img {
+      width: 100%;
+      max-height: 60px;
+      object-fit: cover;
+      border-radius: 3px;
+      border: 1px solid #ddd;
+      background: #eee;
+    }
+
+    .page-card-preview {
+      flex: 1;
+      font-size: 11px;
+      color: #555;
+      white-space: pre-wrap;
+      overflow: hidden;
+      max-height: 4.5em;
+      margin-top: 2px;
+    }
+
+    .page-card-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .page-card button {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      background: #eee;
+    }
+
+    .page-card button:hover {
+      background: #ddd;
+    }
+
+    #closePageListBtn {
+      padding: 2px 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <button id="prevPageBtn">← 前のページ</button>
+  <button id="nextPageBtn">次のページ →</button>
+  <button id="addPageBtn">＋ ページ追加</button>
+  <button id="deletePageBtn">✕ ページ削除</button>
+
+  <select id="layoutSelect">
+    <option value="image_text">上：画像 / 下：文字</option>
+    <option value="image_image">上：画像 / 下：画像</option>
+    <option value="text_text">上：文字 / 下：文字</option>
+  </select>
+
+  <button id="pageListBtn">📚 ページ一覧</button>
+
+  <button id="saveFileBtn">💾 書き出し</button>
+  <label>
+    <button id="loadFileBtn">📂 読み込み</button>
+    <input id="fileInput" type="file" accept="application/json">
+  </label>
+
+  <span id="pageIndicator"></span>
+</header>
+
+<main>
+  <!-- 上：画像 or テキスト -->
+  <section id="topPane" class="pane">
+    <!-- 画像モード -->
+    <div id="topImageContainer" class="image-container">
+      <div id="topImageDropArea" class="image-inner">
+        <p>ここに画像をドラッグ＆ドロップ<br>または下のボタンから選択</p>
+        <button id="topSelectImageBtn">画像を選択</button>
+        <button id="topClearImageBtn">画像を削除</button>
+        <input id="topImageFileInput" type="file" accept="image/*">
+      </div>
+      <img id="topImagePreview" class="image-preview" alt="上段画像">
+    </div>
+
+    <!-- テキストモード -->
+    <div id="topTextContainer" class="text-container">
+      <textarea id="topTextArea"
+        placeholder="ここに上段の文章を書きます。&#10;両方文字のページにすることもできます。"></textarea>
+    </div>
+  </section>
+
+  <!-- 下：画像 or テキスト -->
+  <section id="bottomPane" class="pane">
+    <!-- 画像モード -->
+    <div id="bottomImageContainer" class="image-container">
+      <div id="bottomImageDropArea" class="image-inner">
+        <p>ここに画像をドラッグ＆ドロップ<br>または下のボタンから選択</p>
+        <button id="bottomSelectImageBtn">画像を選択</button>
+        <button id="bottomClearImageBtn">画像を削除</button>
+        <input id="bottomImageFileInput" type="file" accept="image/*">
+      </div>
+      <img id="bottomImagePreview" class="image-preview" alt="下段画像">
+    </div>
+
+    <!-- テキストモード -->
+    <div id="bottomTextContainer" class="text-container">
+      <textarea id="bottomTextArea"
+        placeholder="ここに下段の文章を書きます。&#10;コピー・ペーストや選択コピーもできます。"></textarea>
+    </div>
+  </section>
+</main>
+
+<footer>
+  データはブラウザのローカルストレージに自動保存されます（＋必要ならJSONで書き出し）。
+</footer>
+
+<!-- ページ一覧オーバーレイ -->
+<div id="pageListOverlay">
+  <div id="pageListPanel">
+    <div id="pageListHeader">
+      <span>ページ一覧</span>
+      <button id="closePageListBtn">閉じる</button>
+    </div>
+    <div id="pageListBody">
+      <!-- JSでカードを生成 -->
+    </div>
+  </div>
+</div>
+
+<script>
+// =======================
+// タイプライターアニメ
+// =======================
+
+// 各テキストエリアごとにアニメ状態を管理する
+const typingState = new WeakMap();
+// 必要ならここを false にすればアニメ無効
+let enableTypeAnimation = true;
+
+function typeText(target, text, speed = 25) {
+  // アニメ OFF → 即表示
+  if (!enableTypeAnimation) {
+    target.value = text;
+    return;
+  }
+
+  // このターゲット専用の状態オブジェクト
+  const state = { cancelled: false };
+  typingState.set(target, state);
+
+  let i = 0;
+  target.value = "";
+
+  function step() {
+    const current = typingState.get(target);
+
+    // 他のアニメに上書きされた / キャンセルされた
+    if (!current || current !== state || current.cancelled) {
+      target.value = text;
+      return;
+    }
+
+    // ユーザーが編集を始めたら即終了
+    if (document.activeElement === target) {
+      current.cancelled = true;
+      target.value = text;
+      return;
+    }
+
+    target.value = text.slice(0, i);
+    i++;
+
+    if (i <= text.length) {
+      target.scrollTop = target.scrollHeight;
+      setTimeout(step, speed);
+    } else {
+      current.cancelled = true;
+    }
+  }
+
+  // 少し待ってから開始（連続ページ切り替えのチラつき防止）
+  setTimeout(step, 20);
+}
+
+// =======================
+// データ構造
+// =======================
+let pages = [];
+let currentPageIndex = 0;
+const STORAGE_KEY = "localPictureBook_v2";
+
+function createEmptyPage() {
+  return {
+    layout: "image_text",   // "image_text" | "image_image" | "text_text"
+    topImageData: null,
+    bottomImageData: null,
+    topText: "",
+    bottomText: ""
+  };
+}
+
+// =======================
+// DOM取得
+// =======================
+const layoutSelect = document.getElementById("layoutSelect");
+
+const topPane = document.getElementById("topPane");
+const bottomPane = document.getElementById("bottomPane");
+
+const topImageContainer = document.getElementById("topImageContainer");
+const topImageDropArea = document.getElementById("topImageDropArea");
+const topImagePreview = document.getElementById("topImagePreview");
+const topImageFileInput = document.getElementById("topImageFileInput");
+const topSelectImageBtn = document.getElementById("topSelectImageBtn");
+const topClearImageBtn = document.getElementById("topClearImageBtn");
+
+const bottomImageContainer = document.getElementById("bottomImageContainer");
+const bottomImageDropArea = document.getElementById("bottomImageDropArea");
+const bottomImagePreview = document.getElementById("bottomImagePreview");
+const bottomImageFileInput = document.getElementById("bottomImageFileInput");
+const bottomSelectImageBtn = document.getElementById("bottomSelectImageBtn");
+const bottomClearImageBtn = document.getElementById("bottomClearImageBtn");
+
+const topTextContainer = document.getElementById("topTextContainer");
+const bottomTextContainer = document.getElementById("bottomTextContainer");
+const topTextArea = document.getElementById("topTextArea");
+const bottomTextArea = document.getElementById("bottomTextArea");
+
+const prevPageBtn = document.getElementById("prevPageBtn");
+const nextPageBtn = document.getElementById("nextPageBtn");
+const addPageBtn = document.getElementById("addPageBtn");
+const deletePageBtn = document.getElementById("deletePageBtn");
+const pageIndicator = document.getElementById("pageIndicator");
+
+const saveFileBtn = document.getElementById("saveFileBtn");
+const loadFileBtn = document.getElementById("loadFileBtn");
+const fileInput = document.getElementById("fileInput");
+
+const pageListBtn = document.getElementById("pageListBtn");
+const pageListOverlay = document.getElementById("pageListOverlay");
+const pageListBody = document.getElementById("pageListBody");
+const closePageListBtn = document.getElementById("closePageListBtn");
+
+// 「📂 読み込み」ボタン → ファイル選択
+loadFileBtn.addEventListener("click", () => {
+  fileInput.click();
+});
+
+// =======================
+// レイアウトヘルパ
+// =======================
+function topHasImageLayout(layout) {
+  return layout === "image_text" || layout === "image_image";
+}
+function bottomHasImageLayout(layout) {
+  return layout === "image_image";
+}
+
+// =======================
+// 旧形式からの変換
+// =======================
+function normalizePage(p) {
+  // 新形式ならそのまま（補完）
+  if ("layout" in p || "topImageData" in p || "bottomImageData" in p ||
+      "topText" in p || "bottomText" in p) {
+    return {
+      layout: p.layout || "image_text",
+      topImageData: p.topImageData ?? p.imageData ?? null,
+      bottomImageData: p.bottomImageData ?? null,
+      topText: p.topText ?? "",
+      bottomText: p.bottomText ?? p.text ?? ""
+    };
+  }
+  // 旧形式 (imageData + text) からの変換
+  if ("imageData" in p || "text" in p) {
+    return {
+      layout: "image_text",
+      topImageData: p.imageData ?? null,
+      bottomImageData: null,
+      topText: "",
+      bottomText: p.text ?? ""
+    };
+  }
+  // 不明な場合は空ページ
+  return createEmptyPage();
+}
+
+// =======================
+// ローカルストレージ
+// =======================
+function loadFromLocalStorage() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    pages = [createEmptyPage()];
+    currentPageIndex = 0;
+    return;
+  }
+  try {
+    const data = JSON.parse(raw);
+    if (Array.isArray(data.pages)) {
+      pages = data.pages.map(normalizePage);
+      currentPageIndex = Math.min(
+        Math.max(0, data.currentPageIndex || 0),
+        pages.length - 1
+      );
+    } else {
+      pages = [createEmptyPage()];
+      currentPageIndex = 0;
+    }
+  } catch (e) {
+    console.error("load error:", e);
+    pages = [createEmptyPage()];
+    currentPageIndex = 0;
+  }
+}
+
+function saveToLocalStorage() {
+  saveCurrentPageState();
+  const data = {
+    pages,
+    currentPageIndex
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// =======================
+// ページ描画
+// =======================
+function renderPage() {
+  const page = pages[currentPageIndex];
+  const layout = page.layout || "image_text";
+
+  layoutSelect.value = layout;
+
+  const topImageMode = topHasImageLayout(layout);
+  const bottomImageMode = bottomHasImageLayout(layout);
+
+  // 上段
+  if (topImageMode) {
+    topImageContainer.style.display = "flex";
+    topTextContainer.style.display = "none";
+
+    if (page.topImageData) {
+      topImagePreview.src = page.topImageData;
+      topImagePreview.style.display = "block";
+      topImageDropArea.style.display = "none";
+    } else {
+      topImagePreview.style.display = "none";
+      topImageDropArea.style.display = "flex";
+    }
+  } else {
+    topImageContainer.style.display = "none";
+    topTextContainer.style.display = "flex";
+  }
+
+  // 下段
+  if (bottomImageMode) {
+    bottomImageContainer.style.display = "flex";
+    bottomTextContainer.style.display = "none";
+
+    if (page.bottomImageData) {
+      bottomImagePreview.src = page.bottomImageData;
+      bottomImagePreview.style.display = "block";
+      bottomImageDropArea.style.display = "flex";
+    } else {
+      bottomImagePreview.style.display = "none";
+      bottomImageDropArea.style.display = "flex";
+    }
+  } else {
+    bottomImageContainer.style.display = "none";
+    bottomTextContainer.style.display = "flex";
+  }
+
+  // テキスト内容（まずは素で入れておく）
+  topTextArea.value = page.topText || "";
+  bottomTextArea.value = page.bottomText || "";
+
+  // インジケータ
+  pageIndicator.textContent = `ページ ${currentPageIndex + 1} / ${pages.length}`;
+
+  // ===== タイプアニメ適用 =====
+  // layoutごとに「テキストが見えている側だけ」アニメさせる
+
+  // 上段テキストが見えるのは text_text のときだけ
+  if (layout === "text_text" && page.topText) {
+    typeText(topTextArea, page.topText, 25);
+  }
+
+  // 下段テキストが見えるのは text_text と image_text のとき
+  if ((layout === "text_text" || layout === "image_text") && page.bottomText) {
+    typeText(bottomTextArea, page.bottomText, 25);
+  }
+}
+
+// =======================
+// ページ状態保存
+// =======================
+function saveCurrentPageState() {
+  const page = pages[currentPageIndex];
+  page.topText = topTextArea.value;
+  page.bottomText = bottomTextArea.value;
+  // 画像はそれぞれのハンドラで更新済み
+}
+
+// =======================
+// ページ操作
+// =======================
+function goToPage(index) {
+  if (index < 0 || index >= pages.length) return;
+  saveCurrentPageState();
+  currentPageIndex = index;
+  renderPage();
+  saveToLocalStorage();
+}
+
+function addPage() {
+  saveCurrentPageState();
+  const newPage = createEmptyPage();
+  pages.splice(currentPageIndex + 1, 0, newPage);
+  currentPageIndex++;
+  renderPage();
+  saveToLocalStorage();
+  renderPageList();
+}
+
+function deletePage() {
+  if (pages.length === 1) {
+    pages[0] = createEmptyPage();
+    currentPageIndex = 0;
+  } else {
+    pages.splice(currentPageIndex, 1);
+    if (currentPageIndex >= pages.length) {
+      currentPageIndex = pages.length - 1;
+    }
+  }
+  renderPage();
+  saveToLocalStorage();
+  renderPageList(); // 一覧を開いてたら更新
+}
+
+function movePage(oldIndex, newIndex) {
+  if (newIndex < 0 || newIndex >= pages.length) return;
+  const [p] = pages.splice(oldIndex, 1);
+  pages.splice(newIndex, 0, p);
+  currentPageIndex = newIndex;
+  renderPage();
+  saveToLocalStorage();
+  renderPageList();
+}
+
+// =======================
+// 画像読み込み
+// =======================
+function handleImageFile(position, file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    const page = pages[currentPageIndex];
+    if (position === "top") {
+      page.topImageData = dataUrl;
+    } else {
+      page.bottomImageData = dataUrl;
+    }
+    renderPage();
+    saveToLocalStorage();
+    renderPageList(); // サムネ情報更新
+  };
+  reader.readAsDataURL(file);
+}
+
+// ドラッグ & ドロップ（上段）
+topPane.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  const layout = pages[currentPageIndex].layout;
+  if (topHasImageLayout(layout)) {
+    topPane.classList.add("dragover");
+  }
+});
+
+topPane.addEventListener("dragleave", () => {
+  topPane.classList.remove("dragover");
+});
+
+topPane.addEventListener("drop", (e) => {
+  e.preventDefault();
+  topPane.classList.remove("dragover");
+  const layout = pages[currentPageIndex].layout;
+  if (!topHasImageLayout(layout)) return;
+  const file = e.dataTransfer.files[0];
+  handleImageFile("top", file);
+});
+
+// ドラッグ & ドロップ（下段）
+bottomPane.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  const layout = pages[currentPageIndex].layout;
+  if (bottomHasImageLayout(layout)) {
+    bottomPane.classList.add("dragover");
+  }
+});
+
+bottomPane.addEventListener("dragleave", () => {
+  bottomPane.classList.remove("dragover");
+});
+
+bottomPane.addEventListener("drop", (e) => {
+  e.preventDefault();
+  bottomPane.classList.remove("dragover");
+  const layout = pages[currentPageIndex].layout;
+  if (!bottomHasImageLayout(layout)) return;
+  const file = e.dataTransfer.files[0];
+  handleImageFile("bottom", file);
+});
+
+// 画像選択ボタン・削除ボタン
+topSelectImageBtn.addEventListener("click", () => {
+  topImageFileInput.click();
+});
+
+topImageFileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  handleImageFile("top", file);
+  topImageFileInput.value = "";
+});
+
+topClearImageBtn.addEventListener("click", () => {
+  pages[currentPageIndex].topImageData = null;
+  renderPage();
+  saveToLocalStorage();
+  renderPageList();
+});
+
+bottomSelectImageBtn.addEventListener("click", () => {
+  bottomImageFileInput.click();
+});
+
+bottomImageFileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  handleImageFile("bottom", file);
+  bottomImageFileInput.value = "";
+});
+
+bottomClearImageBtn.addEventListener("click", () => {
+  pages[currentPageIndex].bottomImageData = null;
+  renderPage();
+  saveToLocalStorage();
+  renderPageList();
+});
+
+// 画像クリックで差し替え
+topImagePreview.addEventListener("click", () => {
+  topImageFileInput.click();
+});
+
+bottomImagePreview.addEventListener("click", () => {
+  bottomImageFileInput.click();
+});
+
+// =======================
+// レイアウト変更
+// =======================
+layoutSelect.addEventListener("change", () => {
+  saveCurrentPageState();
+  pages[currentPageIndex].layout = layoutSelect.value;
+  renderPage();
+  saveToLocalStorage();
+  renderPageList();
+});
+
+// =======================
+// テキスト変更 → 自動保存
+// =======================
+let textSaveTimer = null;
+function scheduleTextSave() {
+  if (textSaveTimer) clearTimeout(textSaveTimer);
+  textSaveTimer = setTimeout(() => {
+    saveToLocalStorage();
+    renderPageList();
+  }, 500);
+}
+
+topTextArea.addEventListener("input", scheduleTextSave);
+bottomTextArea.addEventListener("input", scheduleTextSave);
+
+// =======================
+// ページ一覧（サムネイル）
+// =======================
+function layoutLabel(layout) {
+  switch (layout) {
+    case "image_text": return "上:画像 / 下:文字";
+    case "image_image": return "上:画像 / 下:画像";
+    case "text_text": return "上:文字 / 下:文字";
+    default: return layout;
+  }
+}
+
+function renderPageList() {
+  if (!pageListOverlay.classList.contains("active")) return;
+  pageListBody.innerHTML = "";
+
+  pages.forEach((p, index) => {
+    const card = document.createElement("div");
+    card.className = "page-card";
+    if (index === currentPageIndex) {
+      card.classList.add("current");
+    }
+
+    const header = document.createElement("div");
+    header.className = "page-card-header";
+    const titleSpan = document.createElement("span");
+    titleSpan.textContent = `P.${index + 1}`;
+    const layoutSpan = document.createElement("span");
+    layoutSpan.className = "page-card-layout";
+    layoutSpan.textContent = layoutLabel(p.layout || "image_text");
+    header.appendChild(titleSpan);
+    header.appendChild(layoutSpan);
+
+    // サムネイル（上画像・下画像）
+    const thumbs = document.createElement("div");
+    thumbs.className = "page-card-thumbs";
+
+    const hasTopImg = !!p.topImageData;
+    const hasBottomImg = !!p.bottomImageData;
+
+    if (hasTopImg) {
+      const imgTop = document.createElement("img");
+      imgTop.src = p.topImageData;
+      imgTop.alt = "上段画像サムネイル";
+      thumbs.appendChild(imgTop);
+    }
+    if (hasBottomImg) {
+      const imgBottom = document.createElement("img");
+      imgBottom.src = p.bottomImageData;
+      imgBottom.alt = "下段画像サムネイル";
+      thumbs.appendChild(imgBottom);
+    }
+
+    // テキストプレビュー
+    const preview = document.createElement("div");
+    preview.className = "page-card-preview";
+    let textPreview = "";
+    if (p.topText) textPreview += p.topText.split("\n")[0];
+    if (p.bottomText) {
+      if (textPreview) textPreview += "\n";
+      textPreview += p.bottomText.split("\n")[0];
+    }
+    if (!textPreview && !hasTopImg && !hasBottomImg) {
+      textPreview = "（内容なし）";
+    }
+    preview.textContent = textPreview;
+
+    const buttons = document.createElement("div");
+    buttons.className = "page-card-buttons";
+    const upBtn = document.createElement("button");
+    upBtn.textContent = "↑";
+    const downBtn = document.createElement("button");
+    downBtn.textContent = "↓";
+
+    upBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      movePage(index, index - 1);
+    });
+    downBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      movePage(index, index + 1);
+    });
+
+    buttons.appendChild(upBtn);
+    buttons.appendChild(downBtn);
+
+    card.appendChild(header);
+    if (hasTopImg || hasBottomImg) {
+      card.appendChild(thumbs);
+    }
+    card.appendChild(preview);
+    card.appendChild(buttons);
+
+    card.addEventListener("click", () => {
+      goToPage(index);
+      closePageList();
+    });
+
+    pageListBody.appendChild(card);
+  });
+}
+
+function openPageList() {
+  pageListOverlay.classList.add("active");
+  renderPageList();
+}
+
+function closePageList() {
+  pageListOverlay.classList.remove("active");
+}
+
+pageListBtn.addEventListener("click", openPageList);
+closePageListBtn.addEventListener("click", closePageList);
+pageListOverlay.addEventListener("click", (e) => {
+  if (e.target === pageListOverlay) {
+    closePageList();
+  }
+});
+
+// =======================
+// JSONとして書き出し／読み込み
+// =======================
+saveFileBtn.addEventListener("click", () => {
+  saveCurrentPageState();
+  const data = {
+    pages,
+    currentPageIndex
+  };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "picture_book.json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (Array.isArray(data.pages)) {
+        pages = data.pages.map(normalizePage);
+        currentPageIndex = Math.min(
+          Math.max(0, data.currentPageIndex || 0),
+          pages.length - 1
+        );
+        renderPage();
+        saveToLocalStorage();
+        renderPageList();
+      } else {
+        alert("ファイルの形式が正しくありません。");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("JSONの読み込みに失敗しました。");
+    }
+  };
+  reader.readAsText(file, "utf-8");
+  fileInput.value = "";
+});
+
+// =======================
+// ページ送りボタン
+// =======================
+prevPageBtn.addEventListener("click", () => {
+  goToPage(currentPageIndex - 1);
+});
+
+nextPageBtn.addEventListener("click", () => {
+  goToPage(currentPageIndex + 1);
+});
+
+addPageBtn.addEventListener("click", addPage);
+deletePageBtn.addEventListener("click", deletePage);
+
+// =======================
+// 起動時
+// =======================
+loadFromLocalStorage();
+renderPage();
+
+// 離脱前に保存
+window.addEventListener("beforeunload", saveToLocalStorage);
+</script>
+</body>
+</html>
